@@ -13,12 +13,12 @@ both extending this repo's existing three-tier evaluator (Tier 1 Graph / Tier 2 
   block-and-regenerate model like Arize's guardrails, a continue-and-correct one.
 - **Workstream 2 — Self-evolution (this repo's own README Phase 2/3, unblocked at small scale).**
   ART training on captured traces, then an exploratory spike toward a self-evolving GreenAgent
-  (DGM-style). No CoreWeave-sponsored compute assumed — scoped to whatever compute is actually
-  available (see B2 in the table below).
+  (DGM-style). Compute is whatever's actually available (see B2) — not tied to any specific
+  sponsor's stack.
 
-**What's next, in order:** A1 → A2 → A3 → A4 → A5 → A6 (all agent-runnable, no blockers) → **B1-B4
-(one owner sitting)** → C1-C4. See the remaining-work table — it is the single source of truth for
-what's open; don't let this status section drift from it.
+**What's next, in order:** A1 → A1b → A1c → A2 → A3 → A4 → A5 → A6 → A7 (all agent-runnable, no
+blockers) → **B1-B4 (one owner sitting)** → C1-C5. See the remaining-work table — it is the single
+source of truth for what's open; don't let this status section drift from it.
 
 **The loop:** RED (write the failing test modeling desired behavior) → GREEN (minimal
 implementation) → `make validate` (ruff + pyright + complexipy + coverage) → commit by topic →
@@ -53,10 +53,26 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
   first, per this session's git-safety practice of investigating before discarding anything.
 - **Subagents delegated any item below must run in a git worktree**, not directly against this
   checkout — use `Agent({ isolation: "worktree", ... })` so parallel work can't collide.
+- **CodeFactor does not honor Ruff's `# noqa` comments** — `tests/test_green_server_endpoints.py:231`
+  already carries `# noqa: S104` yet still shows as an open CodeFactor finding. Don't mistake a
+  still-open CodeFactor issue for the noqa not working; the two tools track independently.
 - Cross-repo dependency: Workstream 1's "driven task" is a real `agentic-job-offer-to-application-kit`
   workflow. **Unverified as of this writing** whether that repo's Workflow-tool execution already
   emits A2A-compatible traces this repo's executor can ingest, or whether a bridge/adapter is
   needed — resolve this as the first step of A3, don't assume either way.
+- **`~/.cache/ms-playwright` is a symlink into `/tmp/devcache/...`** in this devcontainer — `/tmp`
+  doesn't survive a container restart, so the symlink can go dangling (contradictory `mkdir`
+  errors: "File exists" for the symlink itself, "ENOENT" following it) even though the symlink in
+  the persistent home dir looks fine. Fix per-session with
+  `mkdir -p /tmp/devcache/home/vscode/.cache/ms-playwright` before any Patchright/Playwright
+  browser install; this is a devcontainer-config issue (belongs in whatever repo defines this
+  devcontainer, not something fixable from inside a single checkout) and will recur after every
+  restart until fixed at that level.
+- **Issue #14's own diagnosis explains A7 and the CI watch-out above**: `pytest.yaml` being
+  `workflow_dispatch`-only is independently named there as "the main reason 110d of staleness
+  accumulated without test breakage being caught," with a concrete fix already specified — add
+  `pull_request: { branches: [main] }` to its trigger block. Worth folding that exact fix into A7
+  rather than re-deriving it.
 
 ## Source map (so the next session doesn't re-explore)
 
@@ -119,6 +135,12 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
 - **Open issues relevant to this arc**: **#15** "enable Ruff S (bandit-equivalent) rules" — folded
   into A1 (see table). **#14** "bump CVE-affected deps (11 alerts)" — related but out of scope for
   this arc; don't pull it in without a separate decision. #18 and #13 are unrelated.
+- **CodeFactor findings (13 total, identical on `main` and this branch — the plan-doc commit is
+  markdown-only, introduced nothing new)**: 8 Security (all Bandit B104/B108, same rule IDs Ruff's
+  `S` ruleset catches — see A1's expanded done-when), 4 Maintainability, 1 Duplication. The
+  `src/green/executor.py:311` unresolved-FIXME finding is **already tracked** in `docs/TODO.md`'s
+  Pydantic-passthrough item — not duplicated as a new item here. The remaining 3 Maintainability +
+  1 Duplication findings are folded in as A1b/A1c below.
 - **Env vars / CLI switches**: any new Astra API key or steering-related setting is documented in
   the existing `src/green/settings.py` / `src/common/settings.py` docstring tables (see source map)
   — not a new standalone list in the README.
@@ -135,19 +157,23 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
   retrofitted.
 - **Git discipline**: one branch per topic (`feat/`, `fix/`, `test/`, `docs/`, `chore/`), commits
   scoped to that topic, squash-merge only once CI + `make validate` + tests are all green, delete
-  the branch after merge (local + remote) — except the dependabot branches noted above.
+  the branch after merge (local + remote) — except the dependabot branches noted above. Going
+  forward, branch names for this arc's items reference the plan number for scan-ability, e.g.
+  `feat/0001-tier4-drift-detector` for A4, not just `feat/tier4-drift-detector`.
 
 ## Remaining-work table
 
 | # | Item | Gate | Done-when |
 |---|---|---|---|
-| A1 | Enable Ruff `S` (bandit-equivalent) rules — closes #15 — before any new module lands | agent | `make validate` runs with `S` rules active, zero new findings on existing code (or findings triaged) |
+| A1 | Enable Ruff `S` (bandit-equivalent) rules — closes #15 — before any new module lands | agent | `make validate` runs with `S` rules active; the 8 CodeFactor-tracked B104/B108 instances triaged with this exact comment template on `src/green/settings.py:41`, `src/purple/settings.py:37`, and the 4 matching test-file B104 assertions: `# noqa: S104 — binds 0.0.0.0 intentionally for the documented "docker run -p 9009:9009" quickstart`; the 2 B108 `/tmp`-path findings (`tests/test_green_settings.py:112,114`) resolved by changing `GREEN_OUTPUT_FILE`'s default from `/tmp/results.json` to `./output/results.json` (relative, matches the existing `output/` dir already in the repo) rather than noqa'd — no operational reason (unlike the 0.0.0.0 case) to keep a predictable `/tmp` path |
+| A1b | Fix 2 ShellCheck bugs found via CodeFactor: `ralph/scripts/setup_project.sh:93` and `:107` self-assign (`PROJECT="$PROJECT"`, `DESCRIPTION="$DESCRIPTION"` — investigate the intended source variable); `ralph/scripts/ralph.sh:85` missing semicolon before `done` (SC1010) | agent | Both fixes verified against ShellCheck; `make validate` still green |
+| A1c | Remove the 127-line duplication between `ralph/scripts/init.sh:8-188` and `ralph/scripts/lib/init.sh:8-188` (CodeFactor Critical) — extract shared logic | agent | Duplication resolved; scope stays limited to this duplication, not a broader Ralph-loop refactor |
 | A2 | Resolve the cross-repo trace-format question: does `agentic-job-offer-to-application-kit`'s Workflow-tool execution already emit A2A-compatible traces, or is a bridge needed | agent | Answer recorded in this plan (append a note); bridge design sketched if needed |
 | A3 | Design drift signals (claimed-done-without-evidence, graph-centrality anomaly, LLM-judge flag) as a Tier 4 `BaseEvaluator` subclass | agent | Design note added to `docs/architecture.md`-equivalent (this repo has none yet — add `docs/architecture.md`) |
 | A4 | TDD the Tier 4 drift-detector against synthetic traces (extend `_build_traces_from_pattern()`) | agent | `make validate` green; new tier tested in isolation, RED commit precedes GREEN commit |
 | A5 | TDD the Astra steering-adapter (mock the Responses API/WebSocket calls in tests — no real spend) | agent | Unit tests pass fully mocked |
 | A6 | TDD the ART-training harness skeleton (trace-loader, graph-score-as-reward, training-loop wrapper; mock the actual training call) | agent | Tests pass; no real GPU/compute touched |
-| A7 | Investigate the 26-minute local `make test_all` runtime | agent | Root cause identified; fix or documented tradeoff |
+| A7 | Investigate the 26-minute local `make test_all` runtime; also add `pull_request: { branches: [main] }` to `.github/workflows/pytest.yaml`'s trigger (issue #14's own fix for why staleness accumulates undetected) | agent | Root cause of runtime identified (fix or documented tradeoff); pytest.yaml runs automatically on PRs going forward |
 | B1 | Provide/confirm an OpenAI API key + spend cap for real Astra calls | owner | Key + budget set |
 | B2 | Decide the Phase 2 compute path — local GPU, a small paid cloud instance, or explicit defer | owner | Decision recorded in this plan |
 | B3 | Review the drift signals from A3 | owner | Sign-off, or redirected |
@@ -156,6 +182,7 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
 | C2 | Run the small-scale ART experiment on whatever B2 decided; capture before/after coordination-quality scores | agent | Numbers recorded, not just claimed |
 | C3 | Record the demo video (README's "Coming Soon" placeholder) covering Phase 1 baseline + the new oversight layer | owner/agent | Video linked from README |
 | C4 | Update README roadmap checkboxes, add the new `docs/GreenAgent-UserStory.md` section, check `docs/PRD.md` relevance, add a real CHANGELOG entry | agent | All four docs reflect shipped state |
+| C5 | Dogfood the arc's own stated goal: run Phase A as an actual unattended session (e.g. via `cc-recursive-team-mode`'s solo/teams harness) and confirm it completes without intervention | agent | A real unattended run log/trace exists showing completion without manual intervention — evidence the "long-running e2e handsoff unattended sessions with minimal supervision" goal holds for this arc's own execution, not just for the oversight feature it built |
 
 ## Approach notes
 
