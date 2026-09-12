@@ -19,7 +19,14 @@ both extending this repo's existing three-tier evaluator (Tier 1 Graph / Tier 2 
   auto-correlated traces; OpenRouter is a fallback LLM provider (trivial `base_url` swap on the
   existing `openai.AsyncOpenAI` client) if the primary provider is rate-limited mid-event.
 
-**What's next, in order:** A1 → A1b → A1c → A2 → A3 → A4 → A5 → A6 → A6b → A6c → A7 (all
+**Prize-track correction (2026-09-12, from the live event page — full detail in the working
+folder's `../2026-09-12-coreweave-hacks-sf/findings.md`, not duplicated here):** there are 7 tracks,
+not 2. Most-Production-Ready stays the primary target, but "Best Use of Weave" is likely already
+cleared by A6b for free, and "Best Use of ARIA" and "Best Use of marimo" are each a small,
+near-free add-on (A6d, A8 below) — worth doing since they're additive, not competing for the same
+build hours. "Best Use of TypeSafe AI" is explicitly skipped — re-confirmed no public API exists.
+
+**What's next, in order:** A1 → A1b → A1c → A2 → A3 → A4 → A5 → A6 → A6b → A6c → A6d → A7 → A8 (all
 agent-runnable, no blockers) → **B1-B4 (one owner sitting)** → C1-C5. See the remaining-work table —
 it is the single source of truth for what's open; don't let this status section drift from it.
 
@@ -183,14 +190,16 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
 | A6 | TDD the critique-refine loop (judge → critique → refine → re-run, wrapping existing Tier1 `GraphEvaluator`/Tier2 `llm_evaluate()` — no training, no new model) | agent | Unit tests pass; loop demonstrably improves a synthetic before/after score without touching weights |
 | A6b | Instrument `GraphEvaluator.evaluate()`, `llm_evaluate()`, and `Executor.evaluate_all()` with W&B Weave (`@weave.op`); run critique-refine iterations inside W&B Sandboxes so traces auto-correlate | agent | A recorded Weave trace shows a full critique-refine iteration running inside a Sandbox |
 | A6c | Add OpenRouter as a fallback LLM provider alongside the existing `openai.AsyncOpenAI` client (base_url swap in `src/common/settings.py` / `llm_judge.py`'s `get_llm_client()`) | agent | Fallback provider selectable via settings; unit test covers the swap, no real spend |
+| A6d | Log a classic `wandb.log()` Run alongside the `@weave.op` instrumentation from A6b (per-iteration before/after Tier1 graph metrics + Tier2 judge score) — ARIA reads classic Runs, not Weave traces, so A6b alone doesn't clear "Best Use of ARIA" | agent | A classic W&B Run exists with the critique-refine iteration metrics logged; ARIA can answer "what changed between iteration 1 and 3" against it |
 | A7 | Investigate the 26-minute local `make test_all` runtime; also add `pull_request: { branches: [main] }` to `.github/workflows/pytest.yaml`'s trigger (issue #14's own fix for why staleness accumulates undetected) | agent | Root cause of runtime identified (fix or documented tradeoff); pytest.yaml runs automatically on PRs going forward |
+| A8 | A marimo/molab notebook visualizing Tier-1 graph metrics or the Weave trace timeline (no GPU needed — pure visualization, no risk from the 12hr session cap) — clears "Best Use of marimo" using data A3/A4 already produce | agent | Notebook runs in molab against real A3/A4 output, no new engineering surface beyond the viz |
 | B1 | Provide/confirm an OpenAI API key + spend cap for real Astra calls, plus W&B Weave/Sandboxes credentials + quota (Fable's de-risking checklist: verify creds, quota, and cold-start latency for real before the demo, not assumed) | owner | Keys + budgets set; a real (non-mocked) Weave trace + Sandboxes run completed once to confirm latency is demo-safe |
 | B2 | Ask on-site whether CoreWeave Hacks' "Most Production-Ready" track judges the Sunday submission snapshot or live repo state at Fully Connected (2 weeks later) — changes how hard to lean on the post-submission-window advantage | owner | Answer recorded in this plan |
 | B3 | Review the drift signals from A3 | owner | Sign-off, or redirected |
 | B4 | Approve merging the Workstream 1 PR(s) | owner | Merge (squash, CI green, never agent auto-merge) |
 | C1 | Wire real Astra calls with the approved key; run the oversight layer live against the resolved (A2) driven task end-to-end | agent | Live run produces a real drift-detection + steering-correction trace |
 | C2 | Run the critique-refine loop (A6) end-to-end via Sandboxes (A6b), OpenRouter (A6c) as fallback; capture before/after coordination-quality scores | agent | Numbers recorded, not just claimed; a scripted Sandboxes-down fallback path exercised at least once (Fable's de-risking checklist) |
-| C3 | Record the demo video (README's "Coming Soon" placeholder) covering Phase 1 baseline + the new oversight layer | owner/agent | Video linked from README |
+| C3 | Record the demo video (README's "Coming Soon" placeholder) covering Phase 1 baseline + the new oversight layer; pitch script explicitly names judges Xiangyi Li (BenchFlow) and Jinjing (Stably AI) — frame Tier1-4 as the same agent-self-verification problem they've built companies around, applied structurally instead of per-output | owner/agent | Video linked from README |
 | C4 | Update README roadmap checkboxes, add the new `docs/GreenAgent-UserStory.md` section, check `docs/PRD.md` relevance, add a real CHANGELOG entry | agent | All four docs reflect shipped state |
 | C5 | Dogfood the arc's own stated goal: run Phase A as an actual unattended session (e.g. via `cc-recursive-team-mode`'s solo/teams harness) and confirm it completes without intervention | agent | A real unattended run log/trace exists showing completion without manual intervention — evidence the "long-running e2e handsoff unattended sessions with minimal supervision" goal holds for this arc's own execution, not just for the oversight feature it built |
 
