@@ -11,14 +11,24 @@ both extending this repo's existing three-tier evaluator (Tier 1 Graph / Tier 2 
   graph-centrality shifts, an LLM-judge flag) and, on detection, pushes a correction into the
   *same in-progress task* via GPT-6 Astra's Responses API mid-turn-steering channel — not a
   block-and-regenerate model like Arize's guardrails, a continue-and-correct one.
-- **Workstream 2 — Self-evolution (this repo's own README Phase 2/3, unblocked at small scale).**
-  ART training on captured traces, then an exploratory spike toward a self-evolving GreenAgent
-  (DGM-style). Compute is whatever's actually available (see B2) — not tied to any specific
-  sponsor's stack.
+- **Workstream 2 — Self-evolution, scoped to a critique-refine loop (not ART/DGM).** Judge → critique
+  → refine → re-run over the existing Tier 1/Tier 2 evaluators, in the Self-Refine/Reflexion
+  lineage — explicitly **not** claimed as novel (see Approach notes). Phase 3 (DGM-style
+  self-evolution) is **dropped from this arc's scope**, not deferred — no training/weights touched.
+  Instrumented with W&B Weave (`@weave.op`) and run inside W&B Sandboxes for isolated execution with
+  auto-correlated traces; OpenRouter is a fallback LLM provider (trivial `base_url` swap on the
+  existing `openai.AsyncOpenAI` client) if the primary provider is rate-limited mid-event.
 
-**What's next, in order:** A1 → A1b → A1c → A2 → A3 → A4 → A5 → A6 → A7 (all agent-runnable, no
-blockers) → **B1-B4 (one owner sitting)** → C1-C5. See the remaining-work table — it is the single
-source of truth for what's open; don't let this status section drift from it.
+**Prize-track correction (2026-09-12, from the live event page — full detail in the working
+folder's `../2026-09-12-coreweave-hacks-sf/findings.md`, not duplicated here):** there are 7 tracks,
+not 2. Most-Production-Ready stays the primary target, but "Best Use of Weave" is likely already
+cleared by A6b for free, and "Best Use of ARIA" and "Best Use of marimo" are each a small,
+near-free add-on (A6d, A8 below) — worth doing since they're additive, not competing for the same
+build hours. "Best Use of TypeSafe AI" is explicitly skipped — re-confirmed no public API exists.
+
+**What's next, in order:** A1 → A1b → A1c → A2 → A3 → A4 → A5 → A6 → A6b → A6c → A6d → A7 → A8 (all
+agent-runnable, no blockers) → **B1-B4 (one owner sitting)** → C1-C5. See the remaining-work table —
+it is the single source of truth for what's open; don't let this status section drift from it.
 
 **The loop:** RED (write the failing test modeling desired behavior) → GREEN (minimal
 implementation) → `make validate` (ruff + pyright + complexipy + coverage) → commit by topic →
@@ -113,9 +123,14 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
   in `docs/TODO.md` L15-21.
 - **CI**: `.github/workflows/pytest.yaml` — `on: workflow_dispatch` only, confirmed zero automatic
   runs. No other workflow runs the suite automatically.
-- **Reference blueprints (external)**: [WeightWatcher](https://github.com/calculatedcontent/weightwatcher)
-  and [PerforatedAI](https://github.com/PerforatedAI/PerforatedAI) (Phase 2, per README roadmap);
-  [DGM paper](https://arxiv.org/abs/2410.04444) (Phase 3).
+- **Reference blueprints (external, self-evolution lineage — context only, this arc doesn't implement
+  DGM/Phase 3)**: [Self-Refine](https://arxiv.org/abs/2303.17651), [Reflexion](https://arxiv.org/abs/2303.11366)
+  (the critique-refine loop's actual lineage — not novel, say so if asked); [DGM paper](https://arxiv.org/abs/2505.22954)
+  (Zhang, Hu, Lu, Lange, Clune — corrected citation; `2410.04444` is "Gödel Agent" (Yin et al.), a
+  different paper previously miscited here).
+- **Sponsor tooling (verified first-party, not from memory)**: [W&B Weave](https://weave-docs.wandb.ai/)
+  `@weave.op` decorator for OTel-based cross-process tracing; [W&B Sandboxes](https://docs.wandb.ai/guides/sandboxes/)
+  for isolated critique-refine iteration execution with auto-correlated Weave traces.
 
 ## Docs & issues audit (per-milestone, not one-time — re-run this section at each ship)
 
@@ -172,15 +187,19 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
 | A3 | Design drift signals (claimed-done-without-evidence, graph-centrality anomaly, LLM-judge flag) as a Tier 4 `BaseEvaluator` subclass | agent | Design note added to `docs/architecture.md`-equivalent (this repo has none yet — add `docs/architecture.md`) |
 | A4 | TDD the Tier 4 drift-detector against synthetic traces (extend `_build_traces_from_pattern()`) | agent | `make validate` green; new tier tested in isolation, RED commit precedes GREEN commit |
 | A5 | TDD the Astra steering-adapter (mock the Responses API/WebSocket calls in tests — no real spend) | agent | Unit tests pass fully mocked |
-| A6 | TDD the ART-training harness skeleton (trace-loader, graph-score-as-reward, training-loop wrapper; mock the actual training call) | agent | Tests pass; no real GPU/compute touched |
+| A6 | TDD the critique-refine loop (judge → critique → refine → re-run, wrapping existing Tier1 `GraphEvaluator`/Tier2 `llm_evaluate()` — no training, no new model) | agent | Unit tests pass; loop demonstrably improves a synthetic before/after score without touching weights |
+| A6b | Instrument `GraphEvaluator.evaluate()`, `llm_evaluate()`, and `Executor.evaluate_all()` with W&B Weave (`@weave.op`); run critique-refine iterations inside W&B Sandboxes so traces auto-correlate | agent | A recorded Weave trace shows a full critique-refine iteration running inside a Sandbox |
+| A6c | Add OpenRouter as a fallback LLM provider alongside the existing `openai.AsyncOpenAI` client (base_url swap in `src/common/settings.py` / `llm_judge.py`'s `get_llm_client()`) | agent | Fallback provider selectable via settings; unit test covers the swap, no real spend |
+| A6d | Log a classic `wandb.log()` Run alongside the `@weave.op` instrumentation from A6b (per-iteration before/after Tier1 graph metrics + Tier2 judge score) — ARIA reads classic Runs, not Weave traces, so A6b alone doesn't clear "Best Use of ARIA" | agent | A classic W&B Run exists with the critique-refine iteration metrics logged; ARIA can answer "what changed between iteration 1 and 3" against it |
 | A7 | Investigate the 26-minute local `make test_all` runtime; also add `pull_request: { branches: [main] }` to `.github/workflows/pytest.yaml`'s trigger (issue #14's own fix for why staleness accumulates undetected) | agent | Root cause of runtime identified (fix or documented tradeoff); pytest.yaml runs automatically on PRs going forward |
-| B1 | Provide/confirm an OpenAI API key + spend cap for real Astra calls | owner | Key + budget set |
-| B2 | Decide the Phase 2 compute path — local GPU, a small paid cloud instance, or explicit defer | owner | Decision recorded in this plan |
+| A8 | A marimo/molab notebook visualizing Tier-1 graph metrics or the Weave trace timeline (no GPU needed — pure visualization, no risk from the 12hr session cap) — clears "Best Use of marimo" using data A3/A4 already produce | agent | Notebook runs in molab against real A3/A4 output, no new engineering surface beyond the viz |
+| B1 | Provide/confirm an OpenAI API key + spend cap for real Astra calls, plus W&B Weave/Sandboxes credentials + quota (Fable's de-risking checklist: verify creds, quota, and cold-start latency for real before the demo, not assumed) | owner | Keys + budgets set; a real (non-mocked) Weave trace + Sandboxes run completed once to confirm latency is demo-safe |
+| B2 | Ask on-site whether CoreWeave Hacks' "Most Production-Ready" track judges the Sunday submission snapshot or live repo state at Fully Connected (2 weeks later) — changes how hard to lean on the post-submission-window advantage | owner | Answer recorded in this plan |
 | B3 | Review the drift signals from A3 | owner | Sign-off, or redirected |
 | B4 | Approve merging the Workstream 1 PR(s) | owner | Merge (squash, CI green, never agent auto-merge) |
 | C1 | Wire real Astra calls with the approved key; run the oversight layer live against the resolved (A2) driven task end-to-end | agent | Live run produces a real drift-detection + steering-correction trace |
-| C2 | Run the small-scale ART experiment on whatever B2 decided; capture before/after coordination-quality scores | agent | Numbers recorded, not just claimed |
-| C3 | Record the demo video (README's "Coming Soon" placeholder) covering Phase 1 baseline + the new oversight layer | owner/agent | Video linked from README |
+| C2 | Run the critique-refine loop (A6) end-to-end via Sandboxes (A6b), OpenRouter (A6c) as fallback; capture before/after coordination-quality scores | agent | Numbers recorded, not just claimed; a scripted Sandboxes-down fallback path exercised at least once (Fable's de-risking checklist) |
+| C3 | Record the demo video (README's "Coming Soon" placeholder) covering Phase 1 baseline + the new oversight layer; pitch script explicitly names judges Xiangyi Li (BenchFlow) and Jinjing (Stably AI) — frame Tier1-4 as the same agent-self-verification problem they've built companies around, applied structurally instead of per-output | owner/agent | Video linked from README |
 | C4 | Update README roadmap checkboxes, add the new `docs/GreenAgent-UserStory.md` section, check `docs/PRD.md` relevance, add a real CHANGELOG entry | agent | All four docs reflect shipped state |
 | C5 | Dogfood the arc's own stated goal: run Phase A as an actual unattended session (e.g. via `cc-recursive-team-mode`'s solo/teams harness) and confirm it completes without intervention | agent | A real unattended run log/trace exists showing completion without manual intervention — evidence the "long-running e2e handsoff unattended sessions with minimal supervision" goal holds for this arc's own execution, not just for the oversight feature it built |
 
@@ -188,6 +207,13 @@ make test_all           # uv run pytest — takes ~27 min locally (see watch-out
 
 - Both workstreams share Tier 4's evaluator scaffolding (A3/A4) as their common dependency — build
   that once, reuse for both, per this repo's own KISS/DRY rule.
-- Workstream 2 (A6, C2) is explicitly the "outlook" tier the README already flags as time-boxed —
-  keep it a bounded spike, not an open-ended research program; Phase 3 (DGM-style self-evolution)
-  stays unscoped beyond a design note until Phase 2's actual results justify committing further.
+- Workstream 2 (A6/A6b/A6c, C2) is a bounded critique-refine spike, not an open-ended research
+  program and not the README's Phase 2 ART-training path — it wraps existing Tier1/Tier2 evaluators
+  with judge→critique→refine→re-run, backed by real (2026-current) research: Self-Refine/Reflexion
+  lineage, **not novel**, say so if asked. Phase 3 (DGM-style self-evolution) is **out of scope for
+  this arc**, not deferred — no training/weights touched anywhere in this plan.
+- The narrow, defensible differentiation claim (verified, not assumed): **interpretable post-hoc**
+  NetworkX graph metrics (Tier 1) feeding **prompt/behavior** refinement (the critique-refine loop),
+  not baked into training or model weights. Graph-structural signal for self-improvement is an
+  active 2026 research cluster too (LLM-GNCF, SkillGraph) — don't claim the *idea* is unique, only
+  this specific interpretable/post-hoc/no-training combination.
